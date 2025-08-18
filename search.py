@@ -1,49 +1,111 @@
-import os
-from pymongo import MongoClient
+import os, textwrap
+from typing import List, Dict
 from dotenv import load_dotenv
+from pymongo import MongoClient
 from sentence_transformers import SentenceTransformer
 
-# Load env
+# Gemini SDK
+from google import genai
+from google.genai import types
+
 load_dotenv()
-MODEL_NAME = os.getenv("MODEL_NAME", "intfloat/multilingual-e5-small")
+
+# ---- Config ----
 MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
-DATABASE = os.getenv("DATABASE", "soni_agent")
-COLLECTION = os.getenv("COLLECTION", "docs")
+DATABASE    = os.getenv("DATABASE", "soni_agent")
+COLLECTION  = os.getenv("COLLECTION", "docs")
+INDEX_NAME  = os.getenv("INDEX_NAME", "default")
 
-# Load model + db
-model = SentenceTransformer(MODEL_NAME)
-client = MongoClient(MONGODB_URI)
-col = client[DATABASE][COLLECTION]
+TOP_K       = int(os.getenv("TOP_K", "5"))
+NUM_CAND    = int(os.getenv("NUM_CANDIDATES", "100"))
 
-def search(query: str, top_k: int = 5):
-    query_vec = model.encode([query])[0].tolist()
-    results = col.aggregate([
+E5_MODEL    = os.getenv("MODEL_NAME", "intfloat/multilingual-e5-small")
+GEMINI_FLASH = os.getenv("GEMINI_FLASH_MODEL", "gemini-2.0-flash-001")
+
+# ---- Init ----
+mongo = MongoClient(MONGODB_URI)
+col = mongo[DATABASE][COLLECTION]
+
+embedder = SentenceTransformer(E5_MODEL)
+gem_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+
+# ---- Retrieval ----
+def retrieve(query: str, top_k: int = TOP_K) -> List[Dict]:
+    qvec = embedder.encode([query], show_progress_bar=False)[0].tolist()
+    cursor = col.aggregate([
         {
             "$vectorSearch": {
-                "queryVector": query_vec,
+                "index": INDEX_NAME,
                 "path": "embedding",
-                "numCandidates": 100,
-                "limit": top_k,
-                "index": "default"  # Atlas Search index name
+                "queryVector": qvec,
+                "numCandidates": NUM_CAND,
+                "limit": top_k
             }
         },
         {
             "$project": {
                 "_id": 0,
                 "text": 1,
+                "meta": 1,
                 "score": {"$meta": "vectorSearchScore"}
             }
         }
     ])
-    return list(results)
+    return list(cursor)
 
+# ---- Prompting Gemini ----
+SYSTEM_HINT = """You are a precise RAG assistant. Answer in Vietnamese.
+- Chỉ dựa vào 'Context' dưới đây, không bịa thêm.
+- Nếu có, hãy trích dẫn Điều/Khoản rõ ràng.
+- Trả lời ngắn gọn, rõ ràng, có gạch đầu dòng khi hợp lý.
+- Cuối cùng liệt kê nguồn [#] theo Context.
+"""
+
+def build_context(chunks: List[Dict]) -> str:
+    lines = []
+    for i, ch in enumerate(chunks, 1):
+        meta = ch.get("meta", {})
+        src = f"(index={meta.get('index')})" if "index" in meta else ""
+        lines.append(f"[{i}] {src}\n{ch['text']}")
+    return "\n\n".join(lines)
+
+def generate_answer(query: str, contexts: List[Dict]) -> str:
+    context_block = build_context(contexts)
+    user_prompt = f"""Câu hỏi: {query}
+
+Context:
+{context_block}
+"""
+    resp = gem_client.models.generate_content(
+        model=GEMINI_FLASH,
+        contents=[
+            types.Content(role="user", parts=[types.Part.from_text(SYSTEM_HINT)]),
+            types.Content(role="user", parts=[types.Part.from_text(user_prompt)]),
+        ],
+        config=types.GenerateContentConfig(
+            temperature=0.3,
+            max_output_tokens=800
+        ),
+    )
+    return resp.text
+
+# ---- CLI Loop ----
 if __name__ == "__main__":
+    print("RAG with MongoDB + E5 Embeddings + Gemini 2.0 Flash")
     while True:
-        q = input("\nEnter your query (or 'exit' to quit): ")
-        if q.lower() in ["exit", "quit"]:
+        q = input("\nNhập câu hỏi (hoặc 'exit'): ").strip()
+        if q.lower() in ("exit", "quit"):
             break
-        hits = search(q, top_k=5)
+        hits = retrieve(q, TOP_K)
         if not hits:
-            print("No results found.")
-        for h in hits:
-            print(f"Score: {h['score']:.4f} | Text: {h['text'][:100]}...")
+            print("Không tìm thấy ngữ cảnh phù hợp.")
+            continue
+
+        print("\nTop hits:")
+        for i, h in enumerate(hits, 1):
+            preview = h["text"].replace("\n", " ")[:110]
+            print(f"[{i}] score={h['score']:.4f}  {preview}...")
+
+        ans = generate_answer(q, hits)
+        print("\n--- Trả lời ---")
+        print(textwrap.fill(ans, width=100))
