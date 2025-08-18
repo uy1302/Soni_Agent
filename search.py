@@ -79,7 +79,8 @@ Context:
     resp = gem_client.models.generate_content(
         model=GEMINI_FLASH,
         contents=[
-            types.Content(role="user", parts=[types.Part.from_text(SYSTEM_HINT)]),
+            types.Content(role="system", parts=[types.Part.from_text(SYSTEM_HINT)]),
+
             types.Content(role="user", parts=[types.Part.from_text(user_prompt)]),
         ],
         config=types.GenerateContentConfig(
@@ -88,6 +89,7 @@ Context:
         ),
     )
     return resp.text
+
 
 # ---- CLI Loop ----
 if __name__ == "__main__":
