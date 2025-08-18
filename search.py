@@ -15,20 +15,16 @@ model = SentenceTransformer(MODEL_NAME)
 client = MongoClient(MONGODB_URI)
 col = client[DATABASE][COLLECTION]
 
-# ---- Search function ----
 def search(query: str, top_k: int = 5):
-    # Encode query
     query_vec = model.encode([query])[0].tolist()
-    
-    # Run vector search
     results = col.aggregate([
         {
             "$vectorSearch": {
                 "queryVector": query_vec,
                 "path": "embedding",
-                "numCandidates": 100,   
-                "limit": top_k,         
-                "index": "default"      
+                "numCandidates": 100,
+                "limit": top_k,
+                "index": "default"  # Atlas Search index name
             }
         },
         {
@@ -39,12 +35,15 @@ def search(query: str, top_k: int = 5):
             }
         }
     ])
-    
     return list(results)
 
-# ---- Example ----
 if __name__ == "__main__":
-    query = "Điều kiện bảo vệ luận án tiến sĩ"
-    hits = search(query, top_k=5)
-    for h in hits:
-        print(f"Score: {h['score']:.4f} | Text: {h['text'][:100]}...")
+    while True:
+        q = input("\nEnter your query (or 'exit' to quit): ")
+        if q.lower() in ["exit", "quit"]:
+            break
+        hits = search(q, top_k=5)
+        if not hits:
+            print("No results found.")
+        for h in hits:
+            print(f"Score: {h['score']:.4f} | Text: {h['text'][:100]}...")
