@@ -71,7 +71,9 @@ def build_context(chunks: List[Dict]) -> str:
 
 def generate_answer(query: str, contexts: List[Dict]) -> str:
     context_block = build_context(contexts)
-    user_prompt = f"""Câu hỏi: {query}
+    user_prompt = f"""{SYSTEM_HINT}
+
+Câu hỏi: {query}
 
 Context:
 {context_block}
@@ -79,8 +81,7 @@ Context:
     resp = gem_client.models.generate_content(
         model=GEMINI_FLASH,
         contents=[
-            {"role": "system", "parts": [{"text": SYSTEM_HINT}]},
-            {"role": "user",   "parts": [{"text": user_prompt}]},
+            {"role": "user", "parts": [{"text": user_prompt}]},
         ],
         config=types.GenerateContentConfig(
             temperature=0.3,
@@ -88,6 +89,7 @@ Context:
         ),
     )
     return resp.text
+
 
 
 
