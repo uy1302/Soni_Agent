@@ -16,7 +16,7 @@ DATABASE    = os.getenv("DATABASE", "soni_agent")
 COLLECTION  = "new_docs"
 INDEX_NAME  = os.getenv("INDEX_NAME", "default")
 
-TOP_K       = int(os.getenv("TOP_K", "3"))
+TOP_K       = int(os.getenv("TOP_K", "1"))
 NUM_CAND    = int(os.getenv("NUM_CANDIDATES", "100"))
 
 E5_MODEL    = os.getenv("MODEL_NAME", "intfloat/multilingual-e5-small")
@@ -106,6 +106,7 @@ if __name__ == "__main__":
         if q.lower() in ("exit", "quit"):
             break
         hits = retrieve(q, TOP_K)
+        print(hits)
         if not hits:
             print("Không tìm thấy ngữ cảnh phù hợp.")
             continue
