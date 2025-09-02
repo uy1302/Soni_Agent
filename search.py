@@ -13,10 +13,10 @@ load_dotenv()
 # ---- Config ----
 MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
 DATABASE    = os.getenv("DATABASE", "soni_agent")
-COLLECTION  = os.getenv("COLLECTION", "docs")
+COLLECTION  = "new_docs"
 INDEX_NAME  = os.getenv("INDEX_NAME", "default")
 
-TOP_K       = int(os.getenv("TOP_K", "1"))
+TOP_K       = int(os.getenv("TOP_K", "3"))
 NUM_CAND    = int(os.getenv("NUM_CANDIDATES", "100"))
 
 E5_MODEL    = os.getenv("MODEL_NAME", "intfloat/multilingual-e5-small")
@@ -37,19 +37,31 @@ def retrieve(query: str, top_k: int = TOP_K) -> List[Dict]:
                 "path": "embedding",
                 "queryVector": qvec,
                 "numCandidates": NUM_CAND,
-                "limit": top_k
+                "limit": top_k   
             }
         },
         {
             "$project": {
                 "_id": 0,
                 "text": 1,
-                "meta": 1,
-                "score": {"$meta": "vectorSearchScore"}
+                "score": {"$meta": "vectorSearchScore"},
+                "parent": 1,
+                "parent_index": 1
             }
         }
     ])
-    return list(cursor)
+    # Score threshold for relevance
+    SCORE_THRESHOLD = float(os.getenv("SCORE_THRESHOLD", "0.5"))
+    results = [doc for doc in cursor if doc["score"] >= SCORE_THRESHOLD]
+    # For each result, return parent chunk for context
+    final = []
+    for doc in results[:top_k]:
+        final.append({
+            "text": doc["parent"],
+            "meta": {"index": doc["parent_index"]},
+            "score": doc["score"]
+        })
+    return final
 
 SYSTEM_HINT = """You are a precise RAG assistant. Answer in Vietnamese.
 - Chỉ dựa vào 'Context' dưới đây, không bịa thêm.

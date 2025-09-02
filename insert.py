@@ -9,7 +9,7 @@ load_dotenv()
 MODEL_NAME = os.getenv("MODEL_NAME", "intfloat/multilingual-e5-small")
 MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
 DATABASE = os.getenv("DATABASE", "soni_agent")
-COLLECTION = os.getenv("COLLECTION", "docs")
+COLLECTION = "new_docs"
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", 32))
 
 model = SentenceTransformer(MODEL_NAME)
