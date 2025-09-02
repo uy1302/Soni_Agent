@@ -16,20 +16,18 @@ DATABASE    = os.getenv("DATABASE", "soni_agent")
 COLLECTION  = os.getenv("COLLECTION", "docs")
 INDEX_NAME  = os.getenv("INDEX_NAME", "default")
 
-TOP_K       = int(os.getenv("TOP_K", "5"))
+TOP_K       = int(os.getenv("TOP_K", "1"))
 NUM_CAND    = int(os.getenv("NUM_CANDIDATES", "100"))
 
 E5_MODEL    = os.getenv("MODEL_NAME", "intfloat/multilingual-e5-small")
 GEMINI_FLASH = os.getenv("GEMINI_FLASH_MODEL", "gemini-2.0-flash-001")
 
-# ---- Init ----
 mongo = MongoClient(MONGODB_URI)
 col = mongo[DATABASE][COLLECTION]
 
 embedder = SentenceTransformer(E5_MODEL)
 gem_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
-# ---- Retrieval ----
 def retrieve(query: str, top_k: int = TOP_K) -> List[Dict]:
     qvec = embedder.encode([query], show_progress_bar=False)[0].tolist()
     cursor = col.aggregate([
@@ -53,7 +51,6 @@ def retrieve(query: str, top_k: int = TOP_K) -> List[Dict]:
     ])
     return list(cursor)
 
-# ---- Prompting Gemini ----
 SYSTEM_HINT = """You are a precise RAG assistant. Answer in Vietnamese.
 - Chỉ dựa vào 'Context' dưới đây, không bịa thêm.
 - Nếu có, hãy trích dẫn Điều/Khoản rõ ràng.
@@ -91,11 +88,7 @@ Context:
     return resp.text
 
 
-
-
-# ---- CLI Loop ----
 if __name__ == "__main__":
-    print("RAG with MongoDB + E5 Embeddings + Gemini 2.0 Flash")
     while True:
         q = input("\nNhập câu hỏi (hoặc 'exit'): ").strip()
         if q.lower() in ("exit", "quit"):
@@ -107,7 +100,7 @@ if __name__ == "__main__":
 
         print("\nTop hits:")
         for i, h in enumerate(hits, 1):
-            preview = h["text"].replace("\n", " ")[:110]
+            preview = h["text"].replace("\n", " ")
             print(f"[{i}] score={h['score']:.4f}  {preview}...")
 
         ans = generate_answer(q, hits)
