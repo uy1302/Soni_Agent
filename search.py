@@ -18,7 +18,7 @@ DATABASE    = os.getenv("DATABASE", "soni_agent")
 COLLECTION  = os.getenv("COLLECTION", "docs")
 INDEX_NAME  = os.getenv("INDEX_NAME", "default")
 
-TOP_K       = int(os.getenv("TOP_K", "3"))
+TOP_K       = int(os.getenv("TOP_K", "1"))
 NUM_CAND    = int(os.getenv("NUM_CANDIDATES", "100"))
 
 E5_MODEL    = os.getenv("MODEL_NAME", "intfloat/multilingual-e5-small")
