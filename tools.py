@@ -1,13 +1,11 @@
 import os
-from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from langchain.tools import tool
-import requests
 from tavily import TavilyClient
 from typing import List, Dict
 from sentence_transformers import SentenceTransformer
 from pymongo import MongoClient
-
+from utils import *
 
 load_dotenv()
 
@@ -20,6 +18,10 @@ TOP_K       = int(os.getenv("TOP_K", "3"))
 NUM_CAND    = int(os.getenv("NUM_CANDIDATES", "100"))
 E5_MODEL    = os.getenv("MODEL_NAME", "intfloat/multilingual-e5-small")
 SCORE_THRESHOLD = float(os.getenv("SCORE_THRESHOLD", "0.2"))
+TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
+tavily_client = TavilyClient(api_key=TAVILY_API_KEY)
+
+PREVIEW_CHARS = 3000
 
 mongo = MongoClient(MONGODB_URI)
 col = mongo[DATABASE][COLLECTION]
@@ -58,27 +60,49 @@ def db_search_tool(query: str) -> str:
         context_lines.append(f"[{i}] {src}\n{doc['parent']}")
     return "\n\n".join(context_lines)
 
-TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
-tavily_client = TavilyClient(api_key=TAVILY_API_KEY)
-
-
-def fetch_page_content(url: str) -> str:
-    try:
-        resp = requests.get(url, timeout=10)
-        soup = BeautifulSoup(resp.text, "html.parser")
-        texts = soup.stripped_strings
-        return "\n".join(texts)
-    except Exception as e:
-        return f"[Lỗi khi truy cập {url}: {e}]"
-
 @tool("InternetSearch", return_direct=False)
 def internet_search_tool(query: str) -> str:
-    """Tìm kiếm thông tin trên Internet khi dữ liệu nội bộ không đủ."""
-    results = tavily_client.search(query + "Đại học Bách Khoa Hà Nội", max_results=3)
+    """Tìm kiếm thông tin qua Internet khi không tìm thấy kết quả trong cơ sở dữ liệu nội bộ."""
+    q = (query or "").strip()
+    if "đại học bách khoa hà nội" not in q.lower():
+        q = f"{q} Đại học Bách Khoa Hà Nội"
+    try:
+        resp = tavily_client.search(q, max_results=5)
+    except Exception as e:
+        return f"[Lỗi khi gọi Tavily: {e}]"
+    raw_results = resp.get("results") if isinstance(resp, dict) else resp
+    if not raw_results:
+        return "[Không tìm thấy thông tin trên Internet]"
     contexts = []
-    for i, res in enumerate(results.get("results", []), 1):
-        url = res.get("url")
-        title = res.get("title", "")
+    for idx, item in enumerate(raw_results, start=1):
+        url = None
+        title = ""
+        score = None
+        snippet = ""
+        if isinstance(item, dict):
+            url = item.get("url") or item.get("link") or item.get("href")
+            title = item.get("title") or item.get("name") or ""
+            score = item.get("score")
+            snippet = item.get("snippet") or item.get("description") or ""
+        elif isinstance(item, tuple) and len(item) >= 1:
+            url = item[0]
+            if len(item) > 1:
+                score = item[1]
+        elif isinstance(item, str):
+            url = item
+        if not url:
+            continue
         page_text = fetch_page_content(url)
-        contexts.append(f"[{i}] {title}\nURL: {url}\n{page_text[:2000]}")
+        if not isinstance(page_text, str):
+            page_text = str(page_text)
+        preview = page_text.strip().replace("\n", " ")
+        if len(preview) > PREVIEW_CHARS:
+            preview = preview[:PREVIEW_CHARS] + " ...[cut]"
+        meta = f"URL: {url}"
+        if score is not None:
+            meta += f" | score: {score}"
+        header = f"[{idx}] {title}".strip()
+        if header == f"[{idx}]":
+            header = f"[{idx}] (No title)"
+        contexts.append(f"{header}\n{meta}\n{preview}")
     return "\n\n".join(contexts) if contexts else "[Không tìm thấy thông tin trên Internet]"
