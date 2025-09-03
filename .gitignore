@@ -1,2 +1,8 @@
 .env
 .venv
+.pytest_cache/
+__pycache__/
+.vscode/
+test1.json
+test2.json
+test3.json
