@@ -22,7 +22,9 @@ dependencies = [
     "psycopg2-binary>=2.9.10",
     "pymongo>=4.14.0",
     "requests>=2.32.4",
+    "selenium>=4.35.0",
     "sentence-transformers>=5.1.0",
+    "streamlit>=1.49.1",
     "tavily-python>=0.7.11",
     "transformers>=4.55.2",
 ]

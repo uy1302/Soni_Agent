@@ -45,11 +45,11 @@ agent = initialize_agent(
 def chat():
     print("Chatbot Soni Agent. Nhập 'exit' để thoát.")
     while True:
-        query = input("\nBạn: ").strip()
+        query = input("\nUser: ").strip()
         if query.lower() in ("exit", "quit"):
             break
         answer = agent.run(query)
-        print("\nBot:", answer)
+        print("\Agent:", answer)
 
 if __name__ == "__main__":
     chat()
